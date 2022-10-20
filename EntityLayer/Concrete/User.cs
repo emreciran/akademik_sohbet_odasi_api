@@ -19,6 +19,8 @@ namespace EntityLayer.Concrete
 
         public string Username { get; set; }
 
+        public string Role { get; set; }
+
         public DateTime CreatedDate { get; set; }
 
         public ICollection<UserProject> UserProjects { get; set; }

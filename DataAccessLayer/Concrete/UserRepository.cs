@@ -121,6 +121,8 @@ namespace DataAccessLayer.Concrete
                 };
             }
 
+            var userRole = await _userManager.GetRolesAsync(user);
+
             var jwtToken = await GenerateJwtToken(user);
 
             var authresult = new AuthResult
@@ -134,8 +136,36 @@ namespace DataAccessLayer.Concrete
             return new UserManagerResponse
             {
                 Message = "",
+                Role = userRole,
                 IsSuccess = true,
                 AuthResult = authresult
+            };
+        }
+
+        public async Task<User> GetUserByEmail(string email)
+        {
+            var user = await _userManager.FindByNameAsync(email);
+            var userRoles = await _userManager.GetRolesAsync(user);
+            var errors = new List<string>();
+
+            var userDetails = _applicationDbContext.Users.FirstOrDefault(x => x.Username == email);
+
+            if(user == null)
+            {
+                errors.Add("Kullanıcı bulunamadı!");
+                return null;
+            }
+
+            return new User
+            {
+                Email = userDetails.Email,
+                Username = userDetails.Username,
+                Name = userDetails.Name,
+                Surname = userDetails.Surname,
+                Role = userDetails.Role,
+                CreatedDate = userDetails.CreatedDate,
+                UserProjects = userDetails.UserProjects,
+                User_ID = userDetails.User_ID
             };
         }
 
@@ -186,6 +216,7 @@ namespace DataAccessLayer.Concrete
                 Surname = model.Surname,
                 Email = model.Email,
                 Username = model.Username,
+                Role = "Ogrenci",
                 CreatedDate = DateTime.Now
             };
 
@@ -221,9 +252,12 @@ namespace DataAccessLayer.Concrete
                     Errors = jwtToken.Errors
                 };
 
+                var userRoles = await _userManager.GetRolesAsync(user);
+
                 return new UserManagerResponse
                 {
                     Message = "Kullanıcı başarıyla oluşturuldu.",
+                    Role = userRoles,
                     IsSuccess = true,
                     AuthResult = authresult
                 };
@@ -287,6 +321,16 @@ namespace DataAccessLayer.Concrete
 
             var result = await VerifyAndGenerateToken(tokenRequest);
 
+            if (!result.Success)
+            {
+                return new UserManagerResponse
+                {
+                    AuthResult = result,
+                    IsSuccess = false,
+                    Errors = result.Errors,
+                };
+            }
+
             if (result == null)
             {
                 return new UserManagerResponse
@@ -299,7 +343,8 @@ namespace DataAccessLayer.Concrete
             return new UserManagerResponse
             {
                 Message = "",
-                IsSuccess = true
+                IsSuccess = true,
+                AuthResult = result,
             };
         }
 
@@ -518,5 +563,6 @@ namespace DataAccessLayer.Concrete
             return new string(Enumerable.Repeat(chars, length)
                 .Select(x => x[random.Next(x.Length)]).ToArray());
         }
+
     }
 }

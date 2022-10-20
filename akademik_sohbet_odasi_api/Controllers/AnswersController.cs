@@ -53,7 +53,7 @@ namespace akademik_sohbet_odasi_api.Controllers
         public async Task<IActionResult> CreateAnswer(Answer answer)
         {
             var createdAnswer = await _answerService.Insert(answer);
-            return CreatedAtAction("GetAllQuestion", new { id = createdAnswer.Answer_ID }, createdAnswer);//201 + data
+            return CreatedAtAction("GetAllAnswer", new { id = createdAnswer.Answer_ID }, createdAnswer);//201 + data
         }
 
         [HttpPut]

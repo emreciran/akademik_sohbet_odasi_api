@@ -1,12 +1,16 @@
 ﻿using BusinessLayer.Abstract;
 using DataAccessLayer.Abstract;
+using DataAccessLayer.Context;
+using EntityLayer.Concrete;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Shared;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Claims;
 using System.Threading.Tasks;
 
 namespace akademik_sohbet_odasi_api.Controllers
@@ -17,11 +21,13 @@ namespace akademik_sohbet_odasi_api.Controllers
     {
         private IUserRepository _userRepository;
         private IConfiguration _configuration;
+        private ApplicationDbContext _applicationDbContext;
 
-        public AuthController(IUserRepository userRepository, IConfiguration configuration)
+        public AuthController(IUserRepository userRepository, IConfiguration configuration, ApplicationDbContext applicationDbContext)
         {
             _userRepository = userRepository;
             _configuration = configuration;
+            _applicationDbContext = applicationDbContext;
         }
 
         [HttpPost("Register")]
@@ -51,6 +57,12 @@ namespace akademik_sohbet_odasi_api.Controllers
 
                 if (result.IsSuccess)
                 {
+                    var jwt = result.AuthResult.Token;
+                    HttpContext.Response.Cookies.Append("jwt", jwt, new CookieOptions
+                    {
+                        HttpOnly = true,
+                        Expires = DateTime.Now.AddHours(4)
+                    });
                     return Ok(result);
                 }
 
@@ -128,6 +140,17 @@ namespace akademik_sohbet_odasi_api.Controllers
             }
 
             return BadRequest();
+        }
+
+        [HttpPost("Logout")]
+        public async Task<IActionResult> Logout()
+        {
+            HttpContext.Response.Cookies.Delete("jwt", new CookieOptions(){ 
+                Secure = true,  
+                Expires = DateTime.Now.AddDays(-1),
+            });
+            
+            return Ok("Success");
         }
     }
 }

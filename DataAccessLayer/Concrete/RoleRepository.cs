@@ -1,4 +1,5 @@
 ﻿using DataAccessLayer.Abstract;
+using DataAccessLayer.Context;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Shared;
@@ -14,11 +15,13 @@ namespace DataAccessLayer.Concrete
     {
         private UserManager<IdentityUser> _userManager;
         private RoleManager<IdentityRole> _roleManager;
+        private ApplicationDbContext _applicationDbContext;
 
-        public RoleRepository(UserManager<IdentityUser> userManager, RoleManager<IdentityRole> roleManager)
+        public RoleRepository(UserManager<IdentityUser> userManager, RoleManager<IdentityRole> roleManager, ApplicationDbContext applicationDbContext)
         {
             _userManager = userManager;
             _roleManager = roleManager;
+            _applicationDbContext = applicationDbContext;
         }
 
         public async Task<RoleManagerResponse> AddUserToRole(string email, string roleName)
@@ -45,13 +48,25 @@ namespace DataAccessLayer.Concrete
                 };
             }
 
+            var currentRole = await GetUserRoles(email);
+
+            if(currentRole.Count > 0)
+            {
+                var deleteCurrentRole = await RemoveUserFromRole(email, currentRole[0]);
+            }
+            
             var result = await _userManager.AddToRoleAsync(user, roleName);
 
+            var userDetails = _applicationDbContext.Users.FirstOrDefault(x => x.Email == email);
+            userDetails.Role = roleName;
+            _applicationDbContext.Update(userDetails);
+            await _applicationDbContext.SaveChangesAsync();
+            
             if (result.Succeeded)
             {
                 return new RoleManagerResponse
                 {
-                    Message = $"{email} Mail adresine ait kullanıcı {roleName} rolüne eklendi.",
+                    Message = $"{email} Mail adresine ait kullanıcı {currentRole[0]} rolünden kaldırıldı, {roleName} rolüne eklendi.",
                     IsSuccess = true
                 };
             }
@@ -109,7 +124,7 @@ namespace DataAccessLayer.Concrete
 
         public async Task<IList<string>> GetUserRoles(string email)
         {
-            var user = await _userManager.FindByNameAsync(email);
+            var user = await _userManager.FindByEmailAsync(email);
 
             if (user == null)
             {

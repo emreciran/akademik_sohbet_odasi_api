@@ -19,5 +19,6 @@ namespace BusinessLayer.Abstract
         Task<UserManagerResponse> ResetPassword(ResetPasswordViewModel model);
 
         Task<UserManagerResponse> RefreshToken(TokenRequest tokenRequest);
+
     }
 }

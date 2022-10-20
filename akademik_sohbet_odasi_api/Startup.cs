@@ -121,7 +121,8 @@ namespace akademik_sohbet_odasi_api
             }
 
             app.UseCors(x => x
-                .AllowAnyOrigin()
+                .WithOrigins(new []{"http://localhost:3000"})
+                .AllowCredentials()
                 .AllowAnyMethod()
                 .AllowAnyHeader());
 
