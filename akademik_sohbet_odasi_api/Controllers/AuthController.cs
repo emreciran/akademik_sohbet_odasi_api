@@ -2,7 +2,10 @@
 using DataAccessLayer.Abstract;
 using DataAccessLayer.Context;
 using EntityLayer.Concrete;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -19,12 +22,14 @@ namespace akademik_sohbet_odasi_api.Controllers
     [ApiController]
     public class AuthController : ControllerBase
     {
+        private UserManager<IdentityUser> _userManager;
         private IUserRepository _userRepository;
         private IConfiguration _configuration;
         private ApplicationDbContext _applicationDbContext;
 
-        public AuthController(IUserRepository userRepository, IConfiguration configuration, ApplicationDbContext applicationDbContext)
+        public AuthController(UserManager<IdentityUser> userManager, IUserRepository userRepository, IConfiguration configuration, ApplicationDbContext applicationDbContext)
         {
+            _userManager = userManager;
             _userRepository = userRepository;
             _configuration = configuration;
             _applicationDbContext = applicationDbContext;
@@ -58,11 +63,13 @@ namespace akademik_sohbet_odasi_api.Controllers
                 if (result.IsSuccess)
                 {
                     var jwt = result.AuthResult.Token;
+                    var user = await _userManager.FindByEmailAsync(model.Email);
                     HttpContext.Response.Cookies.Append("jwt", jwt, new CookieOptions
                     {
                         HttpOnly = true,
-                        Expires = DateTime.Now.AddHours(4)
+                        Expires = DateTime.Now.AddDays(1)
                     });
+
                     return Ok(result);
                 }
 
@@ -133,6 +140,12 @@ namespace akademik_sohbet_odasi_api.Controllers
 
                 if (result.IsSuccess)
                 {
+                    var jwt = result.AuthResult.Token;
+                    HttpContext.Response.Cookies.Append("jwt", jwt, new CookieOptions
+                    {
+                        HttpOnly = true,
+                        Expires = DateTime.Now.AddDays(1)
+                    });
                     return Ok(result);
                 }
 
@@ -145,11 +158,8 @@ namespace akademik_sohbet_odasi_api.Controllers
         [HttpPost("Logout")]
         public async Task<IActionResult> Logout()
         {
-            HttpContext.Response.Cookies.Delete("jwt", new CookieOptions(){ 
-                Secure = true,  
-                Expires = DateTime.Now.AddDays(-1),
-            });
-            
+            //await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+
             return Ok("Success");
         }
     }

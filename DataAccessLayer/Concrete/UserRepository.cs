@@ -319,7 +319,36 @@ namespace DataAccessLayer.Concrete
                 };
             }
 
-            var result = await VerifyAndGenerateToken(tokenRequest);
+            var existRefreshToken = await _applicationDbContext.RefreshTokens.FirstOrDefaultAsync(x => x.Token == tokenRequest.RefreshToken);
+
+            if (existRefreshToken == null)
+            {
+                return new UserManagerResponse
+                {
+                    Message = "Refresh token bulunamadı!",
+                    IsSuccess = false
+                };
+            }
+
+            var user = await _userManager.FindByIdAsync(existRefreshToken.UserId);
+            var userRole = await _userManager.GetRolesAsync(user);
+
+            if (user == null)
+            {
+                return new UserManagerResponse
+                {
+                    Message = "Kullanıcı bulunamadı!",
+                    IsSuccess = false
+                };
+            }
+
+            // update current token 
+            var storedToken = await _applicationDbContext.RefreshTokens.FirstOrDefaultAsync(x => x.Token == tokenRequest.RefreshToken);
+            storedToken.IsUsed = true;
+            _applicationDbContext.RefreshTokens.Update(storedToken);
+            await _applicationDbContext.SaveChangesAsync();
+
+            var result = await GenerateJwtToken(user);
 
             if (!result.Success)
             {
@@ -345,6 +374,7 @@ namespace DataAccessLayer.Concrete
                 Message = "",
                 IsSuccess = true,
                 AuthResult = result,
+                Role = userRole
             };
         }
 
@@ -359,7 +389,7 @@ namespace DataAccessLayer.Concrete
             var tokenDescriptor = new SecurityTokenDescriptor
             {
                 Subject = new ClaimsIdentity(claims),
-                Expires = DateTime.Now.AddHours(4),
+                Expires = DateTime.Now.AddDays(1),
                 SigningCredentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256Signature)
             };
 
@@ -388,20 +418,20 @@ namespace DataAccessLayer.Concrete
             };
         }
 
-        private async Task<List<Claim>> GetAllValidClaims(IdentityUser user)
+        public async Task<List<Claim>> GetAllValidClaims(IdentityUser user)
         {
             var claims = new List<Claim>
             {
-                new Claim("ID", user.Id),
+                new Claim(ClaimTypes.NameIdentifier, user.Id),
                 new Claim(JwtRegisteredClaimNames.Email, user.Email),
                 new Claim(JwtRegisteredClaimNames.Sub, user.Email),
                 new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
-                new Claim(JwtRegisteredClaimNames.UniqueName, user.UserName)
+                new Claim(ClaimTypes.Name, user.UserName)
             };
 
             var userClaims = await _userManager.GetClaimsAsync(user);
             claims.AddRange(userClaims);
-
+            
             var userRoles = await _userManager.GetRolesAsync(user);
 
             foreach (var userRole in userRoles)
@@ -423,130 +453,130 @@ namespace DataAccessLayer.Concrete
             return claims;
         }
 
-        private async Task<AuthResult> VerifyAndGenerateToken(TokenRequest tokenRequest)
-        {
-            var jwtTokenHandler = new JwtSecurityTokenHandler();
+        //private async Task<AuthResult> VerifyAndGenerateToken(TokenRequest tokenRequest)
+        //{
+        //    var jwtTokenHandler = new JwtSecurityTokenHandler();
             
-            try
-            {
-                // Validation 1 - Validation JWT token format
-                var tokenInVerification = jwtTokenHandler.ValidateToken(tokenRequest.Token, _tokenValidationParams, out var validatedToken);
+        //    try
+        //    {
+        //        // Validation 1 - Validation JWT token format
+        //        var tokenInVerification = jwtTokenHandler.ValidateToken(tokenRequest.Token, _tokenValidationParams, out var validatedToken);
 
-                // Validation 2 - Validate encryption alg
-                if (validatedToken is JwtSecurityToken jwtSecurityToken)
-                {
-                    var result = jwtSecurityToken.Header.Alg.Equals(SecurityAlgorithms.HmacSha256, StringComparison.InvariantCultureIgnoreCase);
+        //        // Validation 2 - Validate encryption alg
+        //        if (validatedToken is JwtSecurityToken jwtSecurityToken)
+        //        {
+        //            var result = jwtSecurityToken.Header.Alg.Equals(SecurityAlgorithms.HmacSha256, StringComparison.InvariantCultureIgnoreCase);
 
-                    if (result == false)
-                    {
-                        return null;
-                    }
-                }
+        //            if (result == false)
+        //            {
+        //                return null;
+        //            }
+        //        }
 
-                // Validation 3 - validate expiry date
-                var utcExpiryDate = long.Parse(tokenInVerification.Claims.FirstOrDefault(x => x.Type == JwtRegisteredClaimNames.Exp).Value);
+        //        // Validation 3 - validate expiry date
+        //        var utcExpiryDate = long.Parse(tokenInVerification.Claims.FirstOrDefault(x => x.Type == JwtRegisteredClaimNames.Exp).Value);
 
-                var expiryDate = UnixTimeStampToDateTime(utcExpiryDate);
+        //        var expiryDate = UnixTimeStampToDateTime(utcExpiryDate);
 
-                if (expiryDate > DateTime.Now)
-                {
-                    return new AuthResult()
-                    {
-                        Success = false,
-                        Errors = new List<string>() {
-                            "Token has not yet expired"
-                        }
-                    };
-                }
+        //        if (expiryDate > DateTime.Now)
+        //        {
+        //            return new AuthResult()
+        //            {
+        //                Success = false,
+        //                Errors = new List<string>() {
+        //                    "Token has not yet expired"
+        //                }
+        //            };
+        //        }
 
-                // validation 4 - validate existence of the token
-                var storedToken = await _applicationDbContext.RefreshTokens.FirstOrDefaultAsync(x => x.Token == tokenRequest.RefreshToken);
+        //        // validation 4 - validate existence of the token
+        //        var storedToken = await _applicationDbContext.RefreshTokens.FirstOrDefaultAsync(x => x.Token == tokenRequest.RefreshToken);
 
-                if (storedToken == null)
-                {
-                    return new AuthResult()
-                    {
-                        Success = false,
-                        Errors = new List<string>() {
-                            "Token does not exist"
-                        }
-                    };
-                }
+        //        if (storedToken == null)
+        //        {
+        //            return new AuthResult()
+        //            {
+        //                Success = false,
+        //                Errors = new List<string>() {
+        //                    "Token does not exist"
+        //                }
+        //            };
+        //        }
 
-                // Validation 5 - validate if used
-                if (storedToken.IsUsed)
-                {
-                    return new AuthResult()
-                    {
-                        Success = false,
-                        Errors = new List<string>() {
-                            "Token has been used"
-                        }
-                    };
-                }
+        //        // Validation 5 - validate if used
+        //        if (storedToken.IsUsed)
+        //        {
+        //            return new AuthResult()
+        //            {
+        //                Success = false,
+        //                Errors = new List<string>() {
+        //                    "Token has been used"
+        //                }
+        //            };
+        //        }
 
-                // Validation 6 - validate if revoked
-                if (storedToken.IsRevorked)
-                {
-                    return new AuthResult()
-                    {
-                        Success = false,
-                        Errors = new List<string>() {
-                            "Token has been revoked"
-                        }
-                    };
-                }
+        //        // Validation 6 - validate if revoked
+        //        if (storedToken.IsRevorked)
+        //        {
+        //            return new AuthResult()
+        //            {
+        //                Success = false,
+        //                Errors = new List<string>() {
+        //                    "Token has been revoked"
+        //                }
+        //            };
+        //        }
 
-                // Validation 7 - validate the id
-                var jti = tokenInVerification.Claims.FirstOrDefault(x => x.Type == JwtRegisteredClaimNames.Jti).Value;
+        //        // Validation 7 - validate the id
+        //        var jti = tokenInVerification.Claims.FirstOrDefault(x => x.Type == JwtRegisteredClaimNames.Jti).Value;
 
-                if (storedToken.JwtId != jti)
-                {
-                    return new AuthResult()
-                    {
-                        Success = false,
-                        Errors = new List<string>() {
-                            "Token doesn't match"
-                        }
-                    };
-                }
+        //        if (storedToken.JwtId != jti)
+        //        {
+        //            return new AuthResult()
+        //            {
+        //                Success = false,
+        //                Errors = new List<string>() {
+        //                    "Token doesn't match"
+        //                }
+        //            };
+        //        }
 
-                // update current token 
+        //        // update current token 
 
-                storedToken.IsUsed = true;
-                _applicationDbContext.RefreshTokens.Update(storedToken);
-                await _applicationDbContext.SaveChangesAsync();
+        //        storedToken.IsUsed = true;
+        //        _applicationDbContext.RefreshTokens.Update(storedToken);
+        //        await _applicationDbContext.SaveChangesAsync();
 
-                // Generate a new token
-                var dbUser = await _userManager.FindByIdAsync(storedToken.UserId);
-                return await GenerateJwtToken(dbUser);
-            }
-            catch (Exception ex)
-            {
-                if (ex.Message.Contains("Lifetime validation failed. The token is expired."))
-                {
+        //        // Generate a new token
+        //        var dbUser = await _userManager.FindByIdAsync(storedToken.UserId);
+        //        return await GenerateJwtToken(dbUser);
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        if (ex.Message.Contains("Lifetime validation failed. The token is expired."))
+        //        {
 
-                    return new AuthResult()
-                    {
-                        Success = false,
-                        Errors = new List<string>() {
-                            "Token has expired please re-login"
-                        }
-                    };
+        //            return new AuthResult()
+        //            {
+        //                Success = false,
+        //                Errors = new List<string>() {
+        //                    "Token has expired please re-login"
+        //                }
+        //            };
 
-                }
-                else
-                {
-                    return new AuthResult()
-                    {
-                        Success = false,
-                        Errors = new List<string>() {
-                            "Something went wrong."
-                        }
-                    };
-                }
-            }
-        }
+        //        }
+        //        else
+        //        {
+        //            return new AuthResult()
+        //            {
+        //                Success = false,
+        //                Errors = new List<string>() {
+        //                    "Something went wrong."
+        //                }
+        //            };
+        //        }
+        //    }
+        //}
 
         private DateTime UnixTimeStampToDateTime(long unixTimeStamp)
         {

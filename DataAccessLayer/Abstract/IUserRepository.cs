@@ -25,5 +25,7 @@ namespace DataAccessLayer.Abstract
         Task<UserManagerResponse> RefreshToken(TokenRequest tokenRequest);
 
         Task<User> GetUserByEmail(string email);
+
+        Task<List<Claim>> GetAllValidClaims(IdentityUser user);
     }
 }

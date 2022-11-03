@@ -15,6 +15,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.Net.Http.Headers;
+using Microsoft.OpenApi.Models;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -83,6 +85,7 @@ namespace akademik_sohbet_odasi_api
               .AddEntityFrameworkStores<ApplicationDbContext>()
               .AddDefaultTokenProviders();
 
+           
             services.AddScoped<IQuestionService, QuestionManager>();
             services.AddScoped<IQuestionRepository, QuestionRepository>();
 
@@ -134,6 +137,7 @@ namespace akademik_sohbet_odasi_api
 
             app.UseAuthentication();
             app.UseAuthorization();
+
 
             app.UseEndpoints(endpoints =>
             {
